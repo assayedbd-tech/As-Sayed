@@ -1,0 +1,9 @@
+import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
+import * as schema from './schema';
+
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://alex:AbC123dEf@ep-cool-darkness-a1b2c3d4-pooler.us-east-2.aws.neon.tech/dbname?sslmode=require&channel_binding=require',
+});
+
+export const db = drizzle(pool, { schema });

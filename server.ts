@@ -1,0 +1,665 @@
+import express from "express";
+import path from "path";
+import { createServer as createViteServer } from "vite";
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+import * as schema from './src/db/schema';
+import { eq, desc } from 'drizzle-orm';
+import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { nanoid } from 'nanoid';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'kharmar_bondhu_secret_123';
+
+const sqlite = new Database('sqlite.db');
+const db = drizzle(sqlite, { schema });
+
+async function startServer() {
+  console.log("Initializing database...");
+  try {
+    // Initialize tables for SQLite
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        phone_number TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'worker',
+        is_approved INTEGER NOT NULL DEFAULT 0,
+        farm_name TEXT,
+        monthly_salary REAL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS batches (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        start_date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        initial_chicks INTEGER NOT NULL,
+        cost_per_chick REAL NOT NULL,
+        breed TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        closed_date INTEGER
+      );
+
+      CREATE TABLE IF NOT EXISTS daily_logs (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES batches(id),
+        date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        mortality_count INTEGER NOT NULL,
+        mortality_reason TEXT,
+        mortality_image_url TEXT,
+        feed_used_kg REAL DEFAULT 0,
+        medicine_details TEXT,
+        worker_id TEXT NOT NULL REFERENCES users(id),
+        worker_name TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS feed_records (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES batches(id),
+        date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        bag_count INTEGER NOT NULL,
+        price_per_bag REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        slip_image_url TEXT
+      );
+      
+      CREATE TABLE IF NOT EXISTS medicine_guidelines (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS salary_payments (
+        id TEXT PRIMARY KEY,
+        worker_id TEXT NOT NULL REFERENCES users(id),
+        amount REAL NOT NULL,
+        date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        month TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        description TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT REFERENCES batches(id),
+        category TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        description TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS sales (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES batches(id),
+        date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        quantity INTEGER NOT NULL,
+        weight_kg REAL NOT NULL,
+        price_per_kg REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        receipt_image_url TEXT
+      );
+    `);
+
+    // Migration logic
+    const tableInfoUsers = sqlite.prepare("PRAGMA table_info(users)").all();
+    const hasSalary = (tableInfoUsers as any[]).some(col => col.name === 'monthly_salary');
+    if (!hasSalary) {
+      sqlite.exec("ALTER TABLE users ADD COLUMN monthly_salary REAL DEFAULT 0");
+    }
+
+    const hasApproved = (tableInfoUsers as any[]).some(col => col.name === 'is_approved');
+    if (!hasApproved) {
+      sqlite.exec("ALTER TABLE users ADD COLUMN is_approved INTEGER NOT NULL DEFAULT 0");
+      // Set existing admins as approved
+      sqlite.exec("UPDATE users SET is_approved = 1 WHERE role = 'admin'");
+    }
+
+    const tableInfoLogs = sqlite.prepare("PRAGMA table_info(daily_logs)").all();
+    const hasFeedUsed = (tableInfoLogs as any[]).some(col => col.name === 'feed_used_kg');
+    if (!hasFeedUsed) {
+      sqlite.exec("ALTER TABLE daily_logs ADD COLUMN feed_used_kg REAL DEFAULT 0");
+    }
+
+    const tableInfoSales = sqlite.prepare("PRAGMA table_info(sales)").all();
+    const hasReceiptImage = (tableInfoSales as any[]).some(col => col.name === 'receipt_image_url');
+    if (!hasReceiptImage) {
+      sqlite.exec("ALTER TABLE sales ADD COLUMN receipt_image_url TEXT");
+    }
+
+    console.log("Database tables initialized successfully.");
+  } catch (dbError) {
+    console.error("Database initialization failed:", dbError);
+  }
+
+  const app = express();
+  const PORT = 3000;
+
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(cors());
+
+  // API Routes
+  
+  // Database connection helper
+  const getDb = () => db;
+
+  // Date parsing middleware helper
+  const withDateParsing = (handler: (req: express.Request, res: express.Response) => Promise<any>) => {
+    return async (req: express.Request, res: express.Response) => {
+      try {
+        const dateFields = ['date', 'startDate', 'closedDate', 'createdAt', 'updatedAt'];
+        for (const field of dateFields) {
+          if (req.body && req.body[field] && typeof req.body[field] === 'string') {
+            const date = new Date(req.body[field]);
+            if (!isNaN(date.getTime())) {
+              req.body[field] = date;
+            }
+          }
+        }
+        await handler(req, res);
+      } catch (error) {
+        console.error("API Error:", error);
+        res.status(500).json({ error: (error as Error).message });
+      }
+    };
+  };
+
+  // Auth Middleware
+  const authenticateToken = async (req: any, res: any, next: any) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.sendStatus(401);
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const db = getDb();
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.id, decoded.id),
+      });
+
+      if (!user) return res.sendStatus(403);
+      req.user = user;
+      next();
+    } catch (err) {
+      return res.sendStatus(403);
+    }
+  };
+
+  const isAdmin = (req: any, res: any, next: any) => {
+    if (req.user && req.user.role === 'admin') {
+      next();
+    } else {
+      res.status(403).json({ error: "Access denied. Admins only." });
+    }
+  };
+
+  // Auth Routes
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { phoneNumber, password, name, farmName } = req.body;
+      if (!phoneNumber || !password || !name) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const db = getDb();
+      
+      // Check if user exists
+      const existingUser = await db.query.users.findFirst({
+        where: eq(schema.users.phoneNumber, phoneNumber),
+      });
+
+      if (existingUser) {
+        return res.status(400).json({ error: "User already exists with this phone number" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const userId = nanoid();
+
+      const isAdminUser = phoneNumber === '+8801737894675' || phoneNumber === '+8801831445778' || phoneNumber === '+8801819251747';
+      
+      const newUser = {
+        id: userId,
+        phoneNumber,
+        password: hashedPassword,
+        name,
+        farmName,
+        role: isAdminUser ? 'admin' : 'worker',
+        isApproved: isAdminUser ? true : false,
+      };
+
+      await db.insert(schema.users).values(newUser);
+
+      const token = jwt.sign({ id: userId, phoneNumber }, JWT_SECRET);
+      
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.json({ user: userWithoutPassword, token });
+    } catch (error) {
+      console.error("Register Error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { phoneNumber, password } = req.body;
+      const db = getDb();
+
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.phoneNumber, phoneNumber),
+      });
+
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: "Invalid phone number or password" });
+      }
+
+      if (!user.isApproved && user.role !== 'admin') {
+        return res.status(403).json({ error: "আপনার অ্যাকাউন্টটি এখনো অ্যাপ্রুভ করা হয়নি। দয়া করে এডমিনের সাথে যোগাযোগ করুন।" });
+      }
+
+      const token = jwt.sign({ id: user.id, phoneNumber: user.phoneNumber }, JWT_SECRET);
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword, token });
+    } catch (error) {
+      console.error("Login Error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/admin/workers", authenticateToken, isAdmin, async (req, res) => {
+    console.log("Adding worker:", req.body.phoneNumber);
+    try {
+      const { phoneNumber, password, name, monthlySalary } = req.body;
+      if (!phoneNumber || !password || !name) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const db = getDb();
+      const existingUser = await db.query.users.findFirst({
+        where: eq(schema.users.phoneNumber, phoneNumber),
+      });
+
+      if (existingUser) {
+        console.log("Worker already exists:", phoneNumber);
+        return res.status(400).json({ error: "User already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const userId = nanoid();
+
+      const newUser = {
+        id: userId,
+        phoneNumber,
+        password: hashedPassword,
+        name,
+        role: 'worker' as const,
+        monthlySalary: monthlySalary || 0,
+        isApproved: true,
+      };
+
+      await db.insert(schema.users).values(newUser);
+      console.log("Worker added successfully:", userId);
+      
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Add Worker Error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
+    try {
+      const db = getDb();
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.id, req.user.id),
+      });
+
+      if (!user) return res.sendStatus(404);
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // User Routes
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const db = getDb();
+      const user = await db.query.users.findFirst({
+        where: eq(schema.users.id, req.params.id),
+      });
+      res.json(user || null);
+    } catch (error) {
+      console.error("GET User Error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/users", withDateParsing(async (req, res) => {
+    const db = getDb();
+    const newUser = req.body;
+    
+    // Ensure id is present if uid was sent by mistake
+    if (!newUser.id && newUser.uid) {
+      newUser.id = newUser.uid;
+      delete newUser.uid;
+    }
+
+    console.log("Saving User:", JSON.stringify(newUser));
+
+    if (!newUser.id) {
+      return res.status(400).json({ error: "Missing user ID" });
+    }
+
+    try {
+      await db.insert(schema.users).values(newUser).onConflictDoUpdate({
+        target: schema.users.id,
+        set: newUser,
+      });
+      res.json(newUser);
+    } catch (error) {
+      console.error("Save User Error:", error);
+      // Drizzle or PG might throw an error we want to see clearly
+      res.status(500).json({ error: (error as Error).message, detail: "Check database logs or schema" });
+    }
+  }));
+
+  // Batch Routes
+  app.get("/api/batches", async (req, res) => {
+    try {
+      const db = getDb();
+      const batches = await db.query.batches.findMany({
+        orderBy: [desc(schema.batches.startDate)],
+      });
+      res.json(batches);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/batches/:id", async (req, res) => {
+    try {
+      const db = getDb();
+      const batch = await db.query.batches.findFirst({
+        where: eq(schema.batches.id, req.params.id),
+      });
+      res.json(batch || null);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/batches", authenticateToken, isAdmin, withDateParsing(async (req: any, res: any) => {
+    const db = getDb();
+    const batchData = { id: nanoid(), ...req.body };
+    await db.insert(schema.batches).values(batchData);
+    res.json(batchData);
+  }));
+
+  // Batch Routes Extensions
+  app.get("/api/batches/:batchId/logs", async (req, res) => {
+    try {
+      const db = getDb();
+      const logs = await db.query.dailyLogs.findMany({
+        where: eq(schema.dailyLogs.batchId, req.params.batchId),
+        orderBy: [desc(schema.dailyLogs.date)],
+      });
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/batches/:batchId/expenses", async (req, res) => {
+    try {
+      const db = getDb();
+      const expenses = await db.query.expenses.findMany({
+        where: eq(schema.expenses.batchId, req.params.batchId),
+        orderBy: [desc(schema.expenses.date)],
+      });
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/batches/:batchId/sales", async (req, res) => {
+    try {
+      const db = getDb();
+      const sales = await db.query.sales.findMany({
+        where: eq(schema.sales.batchId, req.params.batchId),
+        orderBy: [desc(schema.sales.date)],
+      });
+      res.json(sales);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.patch("/api/batches/:id/status", withDateParsing(async (req, res) => {
+    const db = getDb();
+    const { status } = req.body;
+    await db.update(schema.batches)
+      .set({ 
+        status: status as any,
+        closedDate: status === 'closed' ? new Date() : null
+      })
+      .where(eq(schema.batches.id, req.params.id));
+    res.json({ success: true });
+  }));
+
+  app.post("/api/sales", withDateParsing(async (req, res) => {
+    const db = getDb();
+    const saleData = { id: nanoid(), ...req.body };
+    await db.insert(schema.sales).values(saleData);
+    res.json(saleData);
+  }));
+
+  app.post("/api/logs", withDateParsing(async (req, res) => {
+    const db = getDb();
+    const logData = { id: nanoid(), ...req.body };
+    await db.insert(schema.dailyLogs).values(logData);
+    res.json(logData);
+  }));
+
+  // Expense Routes
+  app.get("/api/expenses", async (req, res) => {
+    try {
+      const db = getDb();
+      const expenses = await db.query.expenses.findMany({
+        orderBy: [desc(schema.expenses.date)],
+      });
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/expenses", withDateParsing(async (req, res) => {
+    const db = getDb();
+    const expenseData = { id: nanoid(), ...req.body };
+    await db.insert(schema.expenses).values(expenseData);
+    res.json(expenseData);
+  }));
+
+  // Feed Record Routes
+  app.get("/api/batches/:batchId/feed", async (req, res) => {
+    try {
+      const db = getDb();
+      const records = await db.query.feedRecords.findMany({
+        where: eq(schema.feedRecords.batchId, req.params.batchId),
+        orderBy: [desc(schema.feedRecords.date)],
+      });
+      res.json(records);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/feed", withDateParsing(async (req, res) => {
+    const db = getDb();
+    const feedData = { id: nanoid(), ...req.body };
+    await db.insert(schema.feedRecords).values(feedData);
+    res.json(feedData);
+  }));
+
+  // Salary and Worker Routes
+  app.get("/api/workers", authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const db = getDb();
+      const users = await db.query.users.findMany({
+        where: eq(schema.users.role, 'worker'),
+      });
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/admin/pending-users", authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const db = getDb();
+      const users = await db.query.users.findMany({
+        where: eq(schema.users.isApproved, false),
+      });
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/admin/approve-user/:id", authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const db = getDb();
+      await db.update(schema.users)
+        .set({ isApproved: true })
+        .where(eq(schema.users.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/admin/reject-user/:id", authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const db = getDb();
+      await db.delete(schema.users).where(eq(schema.users.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.patch("/api/users/:id/salary", authenticateToken, isAdmin, async (req, res) => {
+    try {
+      const db = getDb();
+      const { monthlySalary } = req.body;
+      await db.update(schema.users)
+        .set({ monthlySalary })
+        .where(eq(schema.users.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/salary-payments/:workerId", authenticateToken, async (req: any, res) => {
+    try {
+      const db = getDb();
+      // Only admins can see others, workers see only their own
+      if (req.user.role !== 'admin' && req.user.id !== req.params.workerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const payments = await db.query.salaryPayments.findMany({
+        where: eq(schema.salaryPayments.workerId, req.params.workerId),
+        orderBy: [desc(schema.salaryPayments.date)],
+      });
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/salary-payments", authenticateToken, isAdmin, withDateParsing(async (req, res) => {
+    try {
+      const db = getDb();
+      const paymentData = { id: nanoid(), ...req.body };
+      await db.insert(schema.salaryPayments).values(paymentData);
+      res.json(paymentData);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  }));
+
+  // Medicine Guideline Routes
+  app.get("/api/medicine-guidelines", async (req, res) => {
+    try {
+      const db = getDb();
+      const guidelines = await db.query.medicineGuidelines.findMany({
+        orderBy: [desc(schema.medicineGuidelines.updatedAt)],
+      });
+      res.json(guidelines);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/medicine-guidelines", async (req, res) => {
+    try {
+      const db = getDb();
+      const guidelineData = { 
+        id: nanoid(), 
+        ...req.body,
+        updatedAt: new Date()
+      };
+      await db.insert(schema.medicineGuidelines).values(guidelineData);
+      res.json(guidelineData);
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/medicine-guidelines/:id", async (req, res) => {
+    try {
+      const db = getDb();
+      await db.delete(schema.medicineGuidelines).where(eq(schema.medicineGuidelines.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer().catch(console.error);

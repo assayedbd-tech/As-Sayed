@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "User profile with role and farm details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "worker"] },
+        "farmName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "name", "role"]
+    },
+    "batch": {
+      "title": "Batch",
+      "description": "A poultry batch being managed.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "initialChicks": { "type": "number" },
+        "costPerChick": { "type": "number" },
+        "breed": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "closed"] },
+        "closedDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "startDate", "initialChicks", "costPerChick", "breed", "status"]
+    },
+    "dailyLog": {
+      "title": "Daily Log",
+      "description": "Daily monitoring data for a batch.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "batchId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "mortalityCount": { "type": "number" },
+        "mortalityReason": { "type": "string" },
+        "mortalityImageUrl": { "type": "string" },
+        "feedUsedKg": { "type": "number" },
+        "medicineDetails": { "type": "string" },
+        "workerId": { "type": "string" },
+        "workerName": { "type": "string" }
+      },
+      "required": ["id", "batchId", "date", "mortalityCount", "feedUsedKg", "workerId", "workerName"]
+    },
+    "expense": {
+      "title": "Expense",
+      "description": "Additional expenses for a batch.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "batchId": { "type": "string" },
+        "category": { "type": "string", "enum": ["electricity", "other", "feed", "medicine", "equipment"] },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "category", "amount", "date", "description"]
+    },
+    "sale": {
+      "title": "Sale",
+      "description": "Sales records for a batch.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "batchId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "quantity": { "type": "number" },
+        "weightKg": { "type": "number" },
+        "pricePerKg": { "type": "number" },
+        "totalAmount": { "type": "number" }
+      },
+      "required": ["id", "batchId", "date", "quantity", "weightKg", "pricePerKg", "totalAmount"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Stored user profiles."
+    },
+    "/batches/{batchId}": {
+      "schema": "batch",
+      "description": "Poultry batches."
+    },
+    "/batches/{batchId}/logs/{logId}": {
+      "schema": "dailyLog",
+      "description": "Daily logs for a specific batch."
+    },
+    "/batches/{batchId}/expenses/{expenseId}": {
+      "schema": "expense",
+      "description": "Expenses for a specific batch."
+    },
+    "/batches/{batchId}/sales/{saleId}": {
+      "schema": "sale",
+      "description": "Sales records for a specific batch."
+    },
+    "/expenses/{expenseId}": {
+      "schema": "expense",
+      "description": "Global expenses not necessarily tied to a batch or for quick view."
+    }
+  }
+}

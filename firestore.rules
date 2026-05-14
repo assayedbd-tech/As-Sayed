@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // 1. GLOBALS & HELPERS
+    // -------------------------------------------------------------------------
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isWorker() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'worker';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. ENTITY VALIDATIONS
+    // -------------------------------------------------------------------------
+
+    function isValidUser(data) {
+      return data.id == request.auth.uid;
+    }
+
+    function isValidBatch(data) {
+      return data.keys().hasAll(['name', 'startDate', 'initialChicks', 'costPerChick', 'breed', 'status']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.initialChicks is number && data.initialChicks > 0 &&
+             data.costPerChick is number && data.costPerChick >= 0 &&
+             data.status in ['active', 'closed'];
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['batchId', 'date', 'mortalityCount', 'feedUsedKg', 'workerId', 'workerName']) &&
+             isValidId(data.batchId) &&
+             data.mortalityCount is number && data.mortalityCount >= 0 &&
+             data.feedUsedKg is number && data.feedUsedKg >= 0 &&
+             data.workerId == request.auth.uid;
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll(['id', 'category', 'amount', 'date', 'description']) &&
+             data.keys().size() <= 7 &&
+             isValidId(data.id) &&
+             data.category in ['electricity', 'other', 'feed', 'medicine', 'equipment'] &&
+             data.amount is number && data.amount >= 0;
+    }
+
+    function isValidSale(data) {
+      return data.keys().hasAll(['id', 'batchId', 'date', 'quantity', 'weightKg', 'pricePerKg', 'totalAmount']) &&
+             data.keys().size() <= 8 &&
+             isValidId(data.id) &&
+             isValidId(data.batchId) &&
+             data.quantity is number && data.quantity > 0 &&
+             data.weightKg is number && data.weightKg > 0 &&
+             data.pricePerKg is number && data.pricePerKg >= 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. COLLECTION MATCHES
+    // -------------------------------------------------------------------------
+
+    // USERS - Primary Priority
+    match /users/{userId} {
+      // লগইন করা যে কেউ যেকোনো প্রোফাইল পড়তে পারবে (ডেভেলপমেন্ট টেস্টের জন্য সহজ করা হলো)
+      allow get: if isSignedIn();
+      // এডমিন সব ইউজার লিস্ট দেখতে পারবে
+      allow list: if isSignedIn();
+      // প্রোফাইল তৈরি ও আপডেট
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // BATCHES
+    match /batches/{batchId} {
+      allow read: if isSignedIn();
+      allow create: if (isAdmin() || request.auth.token.email.lower() == 'assayedbd@gmail.com') && isValidBatch(incoming());
+      allow update: if (isAdmin() || request.auth.token.email.lower() == 'assayedbd@gmail.com') && isValidBatch(incoming()) && (
+        // Action: Close Batch
+        (existing().status == 'active' && incoming().status == 'closed' && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'closedDate', 'updatedAt'])) ||
+        // Action: Edit Basic Info
+        (existing().status == 'active' && incoming().status == 'active' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'breed', 'updatedAt']))
+      );
+    }
+
+    // LOGS (Subcollection)
+    match /batches/{batchId}/logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidLog(incoming()) && 
+                    get(/databases/$(database)/documents/batches/$(batchId)).data.status == 'active';
+      // Logs are usually immutable once submitted in this app design
+    }
+
+    // EXPENSES (Subcollection and Global)
+    match /batches/{batchId}/expenses/{expenseId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidExpense(incoming()) &&
+                    get(/databases/$(database)/documents/batches/$(batchId)).data.status == 'active';
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidExpense(incoming());
+    }
+
+    // SALES (Subcollection)
+    match /batches/{batchId}/sales/{saleId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidSale(incoming()) &&
+                    get(/databases/$(database)/documents/batches/$(batchId)).data.status == 'active';
+    }
+  }
+}
