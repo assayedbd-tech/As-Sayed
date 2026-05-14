@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { UserProfile, SalaryPayment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, DollarSign, Plus, Calendar, History, ArrowLeft, Save, X, CheckCheck, AlertCircle } from 'lucide-react';
+import { Users, DollarSign, Plus, Calendar, History, ArrowLeft, Save, X, CheckCheck, AlertCircle, Pencil } from 'lucide-react';
 
 interface WorkerManagementProps {
   user: UserProfile;
@@ -16,6 +16,7 @@ export default function WorkerManagement({ user }: WorkerManagementProps) {
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showEditSalary, setShowEditSalary] = useState(false);
   const [showAddWorker, setShowAddWorker] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<SalaryPayment | null>(null);
 
   // Form states
   const [amount, setAmount] = useState('');
@@ -71,16 +72,26 @@ export default function WorkerManagement({ user }: WorkerManagementProps) {
     e.preventDefault();
     if (!selectedWorker) return;
     try {
-      await api.createSalaryPayment({
-        workerId: selectedWorker.id,
-        amount: parseFloat(amount),
-        date: new Date().toISOString(),
-        month,
-        year: parseInt(year),
-        description
-      });
+      if (editingPayment) {
+        await api.updateSalaryPayment(editingPayment.id, {
+          amount: parseFloat(amount),
+          month,
+          year: parseInt(year),
+          description
+        });
+      } else {
+        await api.createSalaryPayment({
+          workerId: selectedWorker.id,
+          amount: parseFloat(amount),
+          date: new Date().toISOString(),
+          month,
+          year: parseInt(year),
+          description
+        });
+      }
       setAmount('');
       setDescription('');
+      setEditingPayment(null);
       setShowAddPayment(false);
       loadPayments(selectedWorker.id);
     } catch (err) {
@@ -127,6 +138,15 @@ export default function WorkerManagement({ user }: WorkerManagementProps) {
       }
       alert('ভুল হয়েছে: ' + errorMsg);
     }
+  };
+
+  const openEditPayment = (payment: SalaryPayment) => {
+    setEditingPayment(payment);
+    setAmount(payment.amount.toString());
+    setDescription(payment.description || '');
+    setMonth(payment.month);
+    setYear(payment.year.toString());
+    setShowAddPayment(true);
   };
 
   const calculateStats = (worker: UserProfile, payments: SalaryPayment[]) => {
@@ -211,9 +231,18 @@ export default function WorkerManagement({ user }: WorkerManagementProps) {
                       <p className="text-[10px] text-stone-400 font-bold uppercase">{new Date(payment.date).toLocaleDateString('bn-BD')}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-black text-emerald-600">৳{payment.amount}</p>
-                    {payment.description && <p className="text-[10px] text-stone-400 font-medium">{payment.description}</p>}
+                  <div className="flex items-center gap-4">
+                    <div className="text-right flex items-center gap-4">
+                      <div>
+                        <p className="text-lg font-black text-emerald-600">৳{payment.amount}</p>
+                        {payment.description && <p className="text-[10px] text-stone-400 font-medium">{payment.description}</p>}
+                      </div>
+                      {user.role === 'admin' && (
+                        <button onClick={() => openEditPayment(payment)} className="p-2 text-stone-400 hover:text-slate-900 transition-colors">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))
@@ -239,12 +268,12 @@ export default function WorkerManagement({ user }: WorkerManagementProps) {
            </form>
         </Modal>
 
-        <Modal isOpen={showAddPayment} onClose={() => setShowAddPayment(false)} title="বেতন প্রদান করুন">
+        <Modal isOpen={showAddPayment} onClose={() => { setShowAddPayment(false); setEditingPayment(null); }} title={editingPayment ? "পেমেন্ট এডিট করুন" : "বেতন প্রদান করুন"}>
            <form onSubmit={handleAddPayment} className="space-y-6">
              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">মাস</label>
-                  <select value={month} onChange={e => setMonth(e.target.value)} className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none">
+                  <select value={month} onChange={e => setMonth(e.target.value)} className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none text-slate-900">
                     {['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'].map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
@@ -252,18 +281,20 @@ export default function WorkerManagement({ user }: WorkerManagementProps) {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">বছর</label>
-                  <input type="number" value={year} onChange={e => setYear(e.target.value)} className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none" />
+                  <input type="number" value={year} onChange={e => setYear(e.target.value)} className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none text-slate-900" />
                 </div>
              </div>
              <div className="space-y-2">
                <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">টাকার পরিমাণ</label>
-               <input type="number" required value={amount} onChange={e => setAmount(e.target.value)} className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none" />
+               <input type="number" required value={amount} onChange={e => setAmount(e.target.value)} className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none text-slate-900" />
              </div>
              <div className="space-y-2">
                <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">বিবরণ (ঐচ্ছিক)</label>
-               <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="উদা: অগ্রিম বেতন" className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none" />
+               <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="উদা: অগ্রিম বেতন" className="w-full px-6 py-4 bg-stone-50 rounded-2xl font-bold border-none text-slate-900" />
              </div>
-             <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-xs">পেমেন্ট কনফার্ম করুন</button>
+             <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-xs">
+               {editingPayment ? 'তথ্য আপডেট করুন' : 'পেমেন্ট কনফার্ম করুন'}
+             </button>
            </form>
         </Modal>
       </motion.div>

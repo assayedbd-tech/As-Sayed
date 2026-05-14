@@ -684,6 +684,18 @@ async function startServer() {
     }
   }));
 
+  app.patch("/api/salary-payments/:id", authenticateToken, isAdmin, withDateParsing(async (req, res) => {
+    try {
+      const db = getDb();
+      await db.update(schema.salaryPayments)
+        .set(req.body)
+        .where(eq(schema.salaryPayments.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  }));
+
   // Medicine Guideline Routes
   app.get("/api/medicine-guidelines", async (req, res) => {
     try {
@@ -730,10 +742,23 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(process.cwd(), 'dist');
+    // In production, serving from the dist folder relative to the root
+    const distPath = path.join(process.cwd(), "dist");
+    console.log(`[Production] Serving static files from: ${distPath}`);
+    
+    // Serve static files
     app.use(express.static(distPath));
+    
+    // Serve index.html for all other routes (SPA)
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      console.log(`[Production] Request: ${req.url} -> serving ${indexPath}`);
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`[Production] Error sending index.html: ${err.message}`);
+          res.status(500).send("সার্ভার সমস্যা: ইনডেক্স ফাইল পাওয়া যায়নি। দয়া করে আবার 'Share' বাটনে ক্লিক করে অ্যাপটি আপডেট করুন।");
+        }
+      });
     });
   }
 

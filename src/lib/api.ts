@@ -272,6 +272,13 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  async updateSalaryPayment(id: string, data: Partial<SalaryPayment>): Promise<void> {
+    await fetchApi(`/api/salary-payments/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
   
   // Status
   async updateBatchStatus(id: string, status: 'active' | 'closed'): Promise<void> {

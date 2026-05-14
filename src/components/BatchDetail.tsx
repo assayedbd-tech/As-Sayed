@@ -240,6 +240,13 @@ export default function BatchDetail({ batchId, user, onBack }: BatchDetailProps)
     setMortalityImageUrl('');
   };
 
+  const resetExpenseForm = () => {
+    setExpenseAmount('');
+    setExpenseDescription('');
+    setExpenseCategory('other');
+    setExpenseImageUrl('');
+  };
+
   const openEditSale = (sale: Sale) => {
     setEditingSale(sale);
     setQuantity(sale.quantity.toString());

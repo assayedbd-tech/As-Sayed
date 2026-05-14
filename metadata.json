@@ -1,6 +1,6 @@
 {
   "name": "এস পোল্টি (S Poultry)",
   "description": "পোল্ট্রি খামার ব্যবস্থাপনার জন্য একটি সহজ অ্যাপ। এর মাধ্যমে আপনি ব্যাচ, খরচ, মৃত্যুহার এবং লাভ-ক্ষতির হিসাব রাখতে পারবেন।",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": []
 }
