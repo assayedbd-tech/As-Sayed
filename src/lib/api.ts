@@ -109,6 +109,13 @@ export const api = {
     });
   },
 
+  async updateLog(id: string, log: Partial<DailyLog>): Promise<void> {
+    await fetchApi(`/api/logs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(log),
+    });
+  },
+
   // Expenses
   async getExpenses(): Promise<Expense[]> {
     try {
@@ -133,6 +140,13 @@ export const api = {
     });
   },
 
+  async updateExpense(id: string, expense: Partial<Expense>): Promise<void> {
+    await fetchApi(`/api/expenses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(expense),
+    });
+  },
+
   // Sales
   async getBatchSales(batchId: string): Promise<Sale[]> {
     try {
@@ -145,6 +159,13 @@ export const api = {
   async createSale(sale: Omit<Sale, 'id'>): Promise<Sale> {
     return await fetchApi('/api/sales', {
       method: 'POST',
+      body: JSON.stringify(sale),
+    });
+  },
+
+  async updateSale(id: string, sale: Partial<Sale>): Promise<void> {
+    await fetchApi(`/api/sales/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(sale),
     });
   },
@@ -165,6 +186,13 @@ export const api = {
     });
   },
 
+  async updateFeedRecord(id: string, data: Partial<FeedRecord>): Promise<void> {
+    await fetchApi(`/api/feed/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
   // Medicine Guidelines
   async getMedicineGuidelines(): Promise<MedicineGuideline[]> {
     try {
@@ -174,7 +202,7 @@ export const api = {
     }
   },
 
-  async createMedicineGuideline(data: { title: string; description: string }): Promise<MedicineGuideline> {
+  async createMedicineGuideline(data: { title: string; description: string; prescriptionImageUrl?: string }): Promise<MedicineGuideline> {
     return await fetchApi('/api/medicine-guidelines', {
       method: 'POST',
       body: JSON.stringify(data),

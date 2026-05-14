@@ -74,6 +74,7 @@ async function startServer() {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
+        prescription_image_url TEXT,
         updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
       );
 
@@ -93,7 +94,8 @@ async function startServer() {
         category TEXT NOT NULL,
         amount REAL NOT NULL,
         date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-        description TEXT NOT NULL
+        description TEXT NOT NULL,
+        image_url TEXT
       );
 
       CREATE TABLE IF NOT EXISTS sales (
@@ -134,7 +136,38 @@ async function startServer() {
       sqlite.exec("ALTER TABLE sales ADD COLUMN receipt_image_url TEXT");
     }
 
+    const tableInfoMed = sqlite.prepare("PRAGMA table_info(medicine_guidelines)").all();
+    const hasPrescriptionImage = (tableInfoMed as any[]).some(col => col.name === 'prescription_image_url');
+    if (!hasPrescriptionImage) {
+      sqlite.exec("ALTER TABLE medicine_guidelines ADD COLUMN prescription_image_url TEXT");
+    }
+
+    const tableInfoExpenses = sqlite.prepare("PRAGMA table_info(expenses)").all();
+    const hasExpenseImage = (tableInfoExpenses as any[]).some(col => col.name === 'image_url');
+    if (!hasExpenseImage) {
+      sqlite.exec("ALTER TABLE expenses ADD COLUMN image_url TEXT");
+    }
+
     console.log("Database tables initialized successfully.");
+
+    // Seed admin user if it doesn't exist or fix password
+    const adminPhones = ['+8801737894675', '+8801831445778', '+8801819251747'];
+    const newAdminPassword = '@as38sayed';
+    const hashedAdminPassword = await bcrypt.hash(newAdminPassword, 10);
+
+    for (const phone of adminPhones) {
+      const existing = sqlite.prepare("SELECT * FROM users WHERE phone_number = ?").get(phone);
+      if (!existing) {
+        sqlite.prepare("INSERT INTO users (id, phone_number, password, name, role, is_approved) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(nanoid(), phone, hashedAdminPassword, 'Admin', 'admin', 1);
+        console.log(`Admin user seeded: ${phone}`);
+      } else {
+        // Force update password for admin phones to ensure it matches the requested one
+        sqlite.prepare("UPDATE users SET password = ?, role = 'admin', is_approved = 1 WHERE phone_number = ?")
+          .run(hashedAdminPassword, phone);
+        console.log(`Admin password updated for: ${phone}`);
+      }
+    }
   } catch (dbError) {
     console.error("Database initialization failed:", dbError);
   }
@@ -208,6 +241,13 @@ async function startServer() {
       const { phoneNumber, password, name, farmName } = req.body;
       if (!phoneNumber || !password || !name) {
         return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const adminPhones = ['+8801737894675', '+8801831445778', '+8801819251747'];
+      const isAdminReserving = adminPhones.includes(phoneNumber);
+
+      if (isAdminReserving) {
+        return res.status(400).json({ error: "এই নাম্বারটি এডমিন হিসেবে সংরক্ষিত। দয়া করে লগইন করুন।" });
       }
 
       const db = getDb();
@@ -347,32 +387,40 @@ async function startServer() {
     }
   });
 
-  app.post("/api/users", withDateParsing(async (req, res) => {
+  app.post("/api/users", authenticateToken, withDateParsing(async (req: any, res: any) => {
     const db = getDb();
-    const newUser = req.body;
+    const updates = req.body;
     
-    // Ensure id is present if uid was sent by mistake
-    if (!newUser.id && newUser.uid) {
-      newUser.id = newUser.uid;
-      delete newUser.uid;
+    // Only allow users to update themselves, or admins to update anyone
+    if (req.user.role !== 'admin' && req.user.id !== updates.id && req.user.id !== updates.uid) {
+      return res.status(403).json({ error: "Unauthorized" });
     }
 
-    console.log("Saving User:", JSON.stringify(newUser));
+    // Standardize ID
+    const userId = updates.id || updates.uid;
+    if (!userId) return res.status(400).json({ error: "Missing user ID" });
 
-    if (!newUser.id) {
-      return res.status(400).json({ error: "Missing user ID" });
+    // Prevent non-admins from changing roles or approval status
+    if (req.user.role !== 'admin') {
+      delete updates.role;
+      delete updates.isApproved;
+      delete updates.phoneNumber; // Don't allow phone change to avoid collisions or hijacking
+    }
+
+    // If password is being updated, hash it
+    if (updates.password) {
+      updates.password = await bcrypt.hash(updates.password, 10);
     }
 
     try {
-      await db.insert(schema.users).values(newUser).onConflictDoUpdate({
+      await db.insert(schema.users).values({ ...updates, id: userId }).onConflictDoUpdate({
         target: schema.users.id,
-        set: newUser,
+        set: updates,
       });
-      res.json(newUser);
+      res.json({ success: true });
     } catch (error) {
       console.error("Save User Error:", error);
-      // Drizzle or PG might throw an error we want to see clearly
-      res.status(500).json({ error: (error as Error).message, detail: "Check database logs or schema" });
+      res.status(500).json({ error: (error as Error).message });
     }
   }));
 
@@ -467,11 +515,27 @@ async function startServer() {
     res.json(saleData);
   }));
 
+  app.patch("/api/sales/:id", authenticateToken, isAdmin, withDateParsing(async (req, res) => {
+    const db = getDb();
+    await db.update(schema.sales)
+      .set(req.body)
+      .where(eq(schema.sales.id, req.params.id));
+    res.json({ success: true });
+  }));
+
   app.post("/api/logs", withDateParsing(async (req, res) => {
     const db = getDb();
     const logData = { id: nanoid(), ...req.body };
     await db.insert(schema.dailyLogs).values(logData);
     res.json(logData);
+  }));
+
+  app.patch("/api/logs/:id", authenticateToken, isAdmin, withDateParsing(async (req, res) => {
+    const db = getDb();
+    await db.update(schema.dailyLogs)
+      .set(req.body)
+      .where(eq(schema.dailyLogs.id, req.params.id));
+    res.json({ success: true });
   }));
 
   // Expense Routes
@@ -494,6 +558,14 @@ async function startServer() {
     res.json(expenseData);
   }));
 
+  app.patch("/api/expenses/:id", authenticateToken, isAdmin, withDateParsing(async (req, res) => {
+    const db = getDb();
+    await db.update(schema.expenses)
+      .set(req.body)
+      .where(eq(schema.expenses.id, req.params.id));
+    res.json({ success: true });
+  }));
+
   // Feed Record Routes
   app.get("/api/batches/:batchId/feed", async (req, res) => {
     try {
@@ -513,6 +585,14 @@ async function startServer() {
     const feedData = { id: nanoid(), ...req.body };
     await db.insert(schema.feedRecords).values(feedData);
     res.json(feedData);
+  }));
+
+  app.patch("/api/feed/:id", authenticateToken, isAdmin, withDateParsing(async (req, res) => {
+    const db = getDb();
+    await db.update(schema.feedRecords)
+      .set(req.body)
+      .where(eq(schema.feedRecords.id, req.params.id));
+    res.json({ success: true });
   }));
 
   // Salary and Worker Routes
@@ -650,7 +730,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

@@ -73,8 +73,8 @@ export default function BatchList({ user, onSelectBatch }: BatchListProps) {
     >
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black tracking-tighter text-slate-900 mb-2 uppercase">ব্যাচ সমূহ</h1>
-          <p className="text-stone-500 font-bold uppercase tracking-widest text-xs">আপনার খামারের সব ব্যাচের তালিকা</p>
+          <h1 className="text-4xl font-black tracking-tighter text-slate-900 dark:text-white mb-2 uppercase font-bangla">ব্যাচ সমূহ</h1>
+          <p className="text-stone-500 dark:text-stone-400 font-bold uppercase tracking-widest text-xs font-bangla">আপনার খামারের সব ব্যাচের তালিকা</p>
         </div>
         {user.role === 'admin' && (
           <button 
@@ -92,18 +92,18 @@ export default function BatchList({ user, onSelectBatch }: BatchListProps) {
           <button
             key={batch.id}
             onClick={() => onSelectBatch(batch.id)}
-            className="group flex items-center justify-between bg-white p-8 rounded-[2.5rem] border border-stone-200 text-left hover:shadow-2xl hover:shadow-slate-100 transition-all hover:border-emerald-200"
+            className="group flex items-center justify-between bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-stone-200 dark:border-slate-800 text-left hover:shadow-2xl hover:shadow-slate-100 dark:hover:shadow-slate-950 transition-all hover:border-emerald-200"
           >
             <div className="flex gap-6 items-center">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl ${batch.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl ${batch.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600' : 'bg-stone-100 dark:bg-slate-800 text-stone-400'}`}>
                 🐔
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-900 mb-1">{batch.name}</h3>
-                <div className="flex items-center gap-4 text-stone-400 font-bold text-[10px] uppercase tracking-widest">
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {new Date(batch.startDate).toLocaleDateString('bn-BD')}</span>
-                  <span className="flex items-center gap-1"><Hash className="w-3 h-3" /> {batch.initialChicks} টি</span>
-                  <span className={`px-2 py-0.5 rounded-full ${batch.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-400'}`}>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white mb-1 font-bangla">{batch.name}</h3>
+                <div className="flex items-center gap-4 text-stone-400 dark:text-stone-500 font-bold text-[10px] uppercase tracking-widest">
+                  <span className="flex items-center gap-1 font-bangla"><Calendar className="w-3 h-3" /> {new Date(batch.startDate).toLocaleDateString('bn-BD')}</span>
+                  <span className="flex items-center gap-1 font-bangla"><Hash className="w-3 h-3" /> {batch.initialChicks} টি</span>
+                  <span className={`px-2 py-0.5 rounded-full font-bangla ${batch.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400' : 'bg-stone-100 dark:bg-slate-800 text-stone-400'}`}>
                     {batch.status === 'active' ? 'সচল' : 'বন্ধ'}
                   </span>
                 </div>
@@ -117,70 +117,70 @@ export default function BatchList({ user, onSelectBatch }: BatchListProps) {
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-[3rem] p-10 max-w-xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-center mb-10">
-                <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">নতুন ব্যাচ</h2>
-                <button onClick={() => setShowAddModal(false)} className="p-3 bg-stone-100 rounded-full hover:bg-stone-200 transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleAddBatch} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">ব্যাচের নাম</label>
-                    <input 
-                      type="text" required placeholder="উদা: লেয়ার ব্যাচ ০১" 
-                      value={name} onChange={(e) => setName(e.target.value)}
-                      className="w-full px-6 py-4 bg-stone-100 rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">জাত / ব্রিড</label>
-                    <input 
-                      type="text" required placeholder="উদা: বয়লার" 
-                      value={breed} onChange={(e) => setBreed(e.target.value)}
-                      className="w-full px-6 py-4 bg-stone-100 rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">মুরগির সংখ্যা</label>
-                    <input 
-                      type="number" required placeholder="১০০০" 
-                      value={initialChicks} onChange={(e) => setInitialChicks(e.target.value)}
-                      className="w-full px-6 py-4 bg-stone-100 rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">প্রতিটির দাম (টাকা)</label>
-                    <input 
-                      type="number" required placeholder="৫০" 
-                      value={costPerChick} onChange={(e) => setCostPerChick(e.target.value)}
-                      className="w-full px-6 py-4 bg-stone-100 rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                    />
-                  </div>
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white dark:bg-slate-900 rounded-[3rem] p-10 max-w-xl w-full max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex justify-between items-center mb-10">
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter font-bangla">নতুন ব্যাচ</h2>
+                  <button onClick={() => setShowAddModal(false)} className="p-3 bg-stone-100 dark:bg-slate-800 rounded-full hover:bg-stone-200 dark:hover:bg-slate-700 transition-colors">
+                    <X className="w-6 h-6 text-slate-900 dark:text-white" />
+                  </button>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] text-stone-400 font-black uppercase tracking-widest pl-2">শুরুর তারিখ</label>
-                  <input 
-                    type="date" required 
-                    value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-6 py-4 bg-stone-100 rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                </div>
+                <form onSubmit={handleAddBatch} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-stone-400 dark:text-stone-500 font-black uppercase tracking-widest pl-2 font-bangla">ব্যাচের নাম</label>
+                      <input 
+                        type="text" required placeholder="উদা: লেয়ার ব্যাচ ০১" 
+                        value={name} onChange={(e) => setName(e.target.value)}
+                        className="w-full px-6 py-4 bg-stone-100 dark:bg-slate-800 dark:text-white rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all border-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-stone-400 dark:text-stone-500 font-black uppercase tracking-widest pl-2 font-bangla">জাত / ব্রিড</label>
+                      <input 
+                        type="text" required placeholder="উদা: বয়লার" 
+                        value={breed} onChange={(e) => setBreed(e.target.value)}
+                        className="w-full px-6 py-4 bg-stone-100 dark:bg-slate-800 dark:text-white rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all border-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-stone-400 dark:text-stone-500 font-black uppercase tracking-widest pl-2 font-bangla">মুরগির সংখ্যা</label>
+                      <input 
+                        type="number" required placeholder="১০০০" 
+                        value={initialChicks} onChange={(e) => setInitialChicks(e.target.value)}
+                        className="w-full px-6 py-4 bg-stone-100 dark:bg-slate-800 dark:text-white rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all border-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] text-stone-400 dark:text-stone-500 font-black uppercase tracking-widest pl-2 font-bangla">প্রতিটির দাম (টাকা)</label>
+                      <input 
+                        type="number" required placeholder="৫০" 
+                        value={costPerChick} onChange={(e) => setCostPerChick(e.target.value)}
+                        className="w-full px-6 py-4 bg-stone-100 dark:bg-slate-800 dark:text-white rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all border-none"
+                      />
+                    </div>
+                  </div>
 
-                <button 
-                  type="submit"
-                  className="w-full bg-slate-900 text-white font-black py-5 rounded-3xl uppercase tracking-widest text-sm shadow-xl shadow-slate-200 mt-4 active:scale-95 transition-all"
-                >
-                  ব্যাচ শুরু করুন
-                </button>
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-stone-400 dark:text-stone-500 font-black uppercase tracking-widest pl-2 font-bangla">শুরুর তারিখ</label>
+                    <input 
+                      type="date" required 
+                      value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full px-6 py-4 bg-stone-100 dark:bg-slate-800 dark:text-white rounded-3xl font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all border-none"
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white font-black py-5 rounded-3xl uppercase tracking-widest text-sm shadow-xl shadow-slate-200 dark:shadow-emerald-900/20 mt-4 active:scale-95 transition-all font-bangla"
+                  >
+                    ব্যাচ শুরু করুন
+                  </button>
               </form>
             </motion.div>
           </div>

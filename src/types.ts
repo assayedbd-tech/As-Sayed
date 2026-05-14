@@ -59,6 +59,7 @@ export interface MedicineGuideline {
   id: string;
   title: string;
   description: string;
+  prescriptionImageUrl?: string;
   updatedAt: string;
 }
 
@@ -69,6 +70,7 @@ export interface Expense {
   amount: number;
   date: string;
   description: string;
+  imageUrl?: string;
 }
 
 export interface Sale {

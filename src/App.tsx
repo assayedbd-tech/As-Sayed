@@ -18,9 +18,19 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<'dashboard' | 'batches' | 'add-log' | 'batch-detail' | 'expenses' | 'medicine' | 'workers' | 'approvals'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'batches' | 'add-log' | 'batch-detail' | 'medicine' | 'workers' | 'approvals'>('dashboard');
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'night'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'light' | 'night') || 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Auth States
   const [isRegistering, setIsRegistering] = useState(false);
@@ -189,6 +199,15 @@ export default function App() {
           >
             {isRegistering ? 'আগে থেকেই অ্যাকাউন্ট আছে? লগইন করুন' : 'অ্যাকাউন্ট নেই? রেজিস্ট্রেশন করুন'}
           </button>
+
+          <div className="mt-8 pt-8 border-t border-stone-100">
+            <p className="text-[10px] text-stone-400 font-black uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
+              <Phone className="w-3 h-3" /> প্রয়োজনে যোগাযোগ করুন
+            </p>
+            <p className="text-sm font-black text-slate-900 tracking-wider">
+              +8801819251747
+            </p>
+          </div>
         </motion.div>
       </div>
     );
@@ -200,13 +219,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 text-slate-900 pb-24 md:pb-0 md:pl-72">
-      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-72 bg-white border-r border-stone-200 flex-col p-8 z-50">
+    <div className={`min-h-screen ${theme === 'night' ? 'dark bg-slate-950 text-white' : 'bg-stone-50 text-slate-900'} pb-24 md:pb-0 md:pl-72 transition-colors duration-300`}>
+      <aside className={`hidden md:flex fixed left-0 top-0 bottom-0 w-72 ${theme === 'night' ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'} border-r flex-col p-8 z-50`}>
         <div className="flex items-center gap-4 mb-14">
           <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center shadow-lg shadow-emerald-600/20">
             <Bird className="w-7 h-7 text-white" />
           </div>
-          <span className="font-black text-2xl tracking-tighter uppercase italic">এস পোল্টি</span>
+          <span className={`font-black text-2xl tracking-tighter uppercase italic ${theme === 'night' ? 'text-white' : 'text-slate-900'}`}>এস পোল্টি</span>
         </div>
 
         <nav className="flex-1 space-y-3">
@@ -218,15 +237,31 @@ export default function App() {
             <>
               <NavItem active={view === 'workers'} icon={User} label="কর্মচারী ও বেতন" onClick={() => setView('workers')} />
               <NavItem active={view === 'approvals'} icon={ShieldCheck} label="ইউজার অনুমোদন" onClick={() => setView('approvals')} />
-              <NavItem active={view === 'expenses'} icon={DollarSign} label="অন্যান্য খরচ" onClick={() => setView('expenses')} />
             </>
           ) : (
-            <NavItem active={view === 'workers'} icon={User} label="আমার বেতন" onClick={() => setView('workers')} />
+            <>
+              <NavItem active={view === 'workers'} icon={User} label="আমার বেতন" onClick={() => setView('workers')} />
+            </>
           )}
         </nav>
 
-        <div className="pt-8 border-t border-stone-100">
-          <div className="flex items-center gap-4 p-4 mb-6 bg-stone-100 rounded-[2rem]">
+        <div className="pt-8 border-t border-stone-100 dark:border-slate-800">
+          <div className="mb-6 grid grid-cols-2 gap-2 bg-stone-100 dark:bg-slate-800 p-1 rounded-2xl">
+            <button 
+              onClick={() => setTheme('light')}
+              className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-white text-slate-900 shadow-sm' : 'text-stone-400'}`}
+            >
+              লাইট মোড
+            </button>
+            <button 
+              onClick={() => setTheme('night')}
+              className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'night' ? 'bg-slate-700 text-white shadow-sm' : 'text-stone-400'}`}
+            >
+              নাইট মোড
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 p-4 mb-6 bg-stone-100 dark:bg-slate-800 rounded-[2rem]">
             <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center text-white font-black border-2 border-white shadow-sm">
               {(user.name || 'U').charAt(0)}
             </div>
@@ -242,7 +277,8 @@ export default function App() {
           
           <div className="mt-4 px-6 text-center">
             <p className="text-[10px] text-stone-400 font-black uppercase tracking-widest mb-1">এডমিন কন্টাক্ট</p>
-            <p className="text-[11px] text-slate-800 font-bold">assayedbd@gmail.com</p>
+            <p className="text-[11px] text-slate-800 font-bold tracking-tight">assayedbd@gmail.com</p>
+            <p className="text-[11px] text-slate-800 font-bold tracking-tight">+8801819251747</p>
           </div>
         </div>
       </aside>
@@ -255,7 +291,6 @@ export default function App() {
           {view === 'batch-detail' && selectedBatchId && (
             <BatchDetail key="batch-detail" batchId={selectedBatchId} user={user} onBack={() => setView('batches')} />
           )}
-          {view === 'expenses' && <ExpenseList key="expenses" user={user} />}
           {view === 'medicine' && <MedicineGuidelines user={user} />}
           {view === 'workers' && <WorkerManagement user={user} />}
           {view === 'approvals' && <UserApprovals />}
@@ -275,19 +310,33 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="bg-white w-[80%] h-full p-8 flex flex-col shadow-2xl"
+              className={`${theme === 'night' ? 'bg-slate-900 border-r border-slate-800' : 'bg-white shadow-2xl'} w-[80%] h-full p-8 flex flex-col`}
             >
               <div className="flex justify-between items-center mb-10">
                 <div className="flex items-center gap-3">
                   <Bird className="w-8 h-8 text-emerald-600" />
-                  <span className="font-black text-xl tracking-tighter uppercase italic">এস পোল্টি</span>
+                  <span className={`font-black text-xl tracking-tighter uppercase italic ${theme === 'night' ? 'text-white' : 'text-slate-900'}`}>এস পোল্টি</span>
                 </div>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-stone-100 rounded-full">
+                <button onClick={() => setIsMobileMenuOpen(false)} className={`p-2 ${theme === 'night' ? 'bg-slate-800 text-white' : 'bg-stone-100'} rounded-full`}>
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <nav className="flex-1 space-y-2">
+                <div className="mb-6 grid grid-cols-2 gap-2 bg-stone-100 dark:bg-slate-800 p-1 rounded-2xl">
+                  <button 
+                    onClick={() => setTheme('light')}
+                    className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-white text-slate-900 shadow-sm' : 'text-emerald-600'}`}
+                  >
+                    লাইট মোড
+                  </button>
+                  <button 
+                    onClick={() => setTheme('night')}
+                    className={`py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'night' ? 'bg-slate-700 text-white shadow-sm' : 'text-stone-400'}`}
+                  >
+                    নাইট মোড
+                  </button>
+                </div>
                 <NavItem 
                   active={view === 'dashboard'} 
                   icon={LayoutDashboard} 
@@ -319,20 +368,12 @@ export default function App() {
                   onClick={() => { setView('workers'); setIsMobileMenuOpen(false); }} 
                 />
                 {user.role === 'admin' && (
-                  <>
-                    <NavItem 
-                      active={view === 'expenses'} 
-                      icon={DollarSign} 
-                      label="অন্যান্য খরচ" 
-                      onClick={() => { setView('expenses'); setIsMobileMenuOpen(false); }} 
-                    />
-                    <NavItem 
-                      active={view === 'approvals'} 
-                      icon={ShieldCheck} 
-                      label="ইউজার অনুমোদন" 
-                      onClick={() => { setView('approvals'); setIsMobileMenuOpen(false); }} 
-                    />
-                  </>
+                  <NavItem 
+                    active={view === 'approvals'} 
+                    icon={ShieldCheck} 
+                    label="ইউজার অনুমোদন" 
+                    onClick={() => { setView('approvals'); setIsMobileMenuOpen(false); }} 
+                  />
                 )}
               </nav>
 
@@ -353,7 +394,8 @@ export default function App() {
 
                 <div className="mt-4 px-6 text-center">
                   <p className="text-[8px] text-stone-400 font-black uppercase tracking-widest mb-1">এডমিন কন্টাক্ট</p>
-                  <p className="text-[10px] text-slate-800 font-bold">assayedbd@gmail.com</p>
+                  <p className="text-[10px] text-slate-800 font-bold tracking-tight">assayedbd@gmail.com</p>
+                  <p className="text-[10px] text-slate-800 font-bold tracking-tight">+8801819251747</p>
                 </div>
               </div>
             </motion.div>
@@ -361,23 +403,25 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex justify-around items-end p-2 z-[100] pb-6">
-        <MobileNavItem active={view === 'dashboard'} icon={LayoutDashboard} label="হোম" onClick={() => setView('dashboard')} />
-        <MobileNavItem active={isMobileMenuOpen} icon={Menu} label="মেনু" onClick={() => setIsMobileMenuOpen(true)} />
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 ${theme === 'night' ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'} border-t flex justify-around items-end p-2 z-[100] pb-6`}>
+        <MobileNavItem active={view === 'dashboard'} icon={LayoutDashboard} label="হোম" onClick={() => setView('dashboard')} theme={theme} />
+        <MobileNavItem active={isMobileMenuOpen} icon={Menu} label="মেনু" onClick={() => setIsMobileMenuOpen(true)} theme={theme} />
         <PlusButton onClick={() => setView('add-log')} />
-        {user.role === 'admin' && <MobileNavItem active={view === 'expenses'} icon={DollarSign} label="খরচ" onClick={() => setView('expenses')} />}
-        <MobileNavItem active={false} icon={LogOut} label="আউট" onClick={logout} />
+        <MobileNavItem active={view === 'batches'} icon={Package} label="ব্যাচ" onClick={() => setView('batches')} theme={theme} />
+        <MobileNavItem active={false} icon={LogOut} label="আউট" onClick={logout} theme={theme} />
       </nav>
     </div>
   );
 }
 
-function NavItem({ active, icon: Icon, label, onClick }: { active: boolean, icon: any, label: string, onClick: () => void }) {
+function NavItem({ active, icon: Icon, label, onClick, theme }: { active: boolean, icon: any, label: string, onClick: () => void, theme?: 'light' | 'night' }) {
   return (
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all font-black uppercase tracking-widest text-xs ${
-        active ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-stone-400 hover:text-slate-900 hover:bg-stone-100'
+        active 
+          ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-xl shadow-slate-200 dark:shadow-emerald-900/20' 
+          : 'text-stone-400 hover:text-slate-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-slate-800'
       }`}
     >
       <Icon className="w-5 h-5" />
@@ -386,9 +430,9 @@ function NavItem({ active, icon: Icon, label, onClick }: { active: boolean, icon
   );
 }
 
-function MobileNavItem({ active, icon: Icon, label, onClick }: { active: boolean, icon: any, label: string, onClick: () => void }) {
+function MobileNavItem({ active, icon: Icon, label, onClick, theme }: { active: boolean, icon: any, label: string, onClick: () => void, theme?: 'light' | 'night' }) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${active ? 'text-emerald-600 bg-stone-100' : 'text-stone-400'}`}>
+    <button onClick={onClick} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${active ? 'text-emerald-600 dark:text-emerald-500 bg-stone-100 dark:bg-slate-800' : 'text-stone-400'}`}>
       <Icon className="w-5 h-5" />
       <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
     </button>

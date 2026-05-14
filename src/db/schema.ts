@@ -61,6 +61,7 @@ export const medicineGuidelines = sqliteTable('medicine_guidelines', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   description: text('description').notNull(),
+  prescriptionImageUrl: text('prescription_image_url'),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`).notNull(),
 });
 
@@ -71,6 +72,7 @@ export const expenses = sqliteTable('expenses', {
   amount: real('amount').notNull(),
   date: integer('date', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`).notNull(),
   description: text('description').notNull(),
+  imageUrl: text('image_url'),
 });
 
 export const sales = sqliteTable('sales', {

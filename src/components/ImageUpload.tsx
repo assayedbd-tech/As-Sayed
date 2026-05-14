@@ -80,7 +80,7 @@ export default function ImageUpload({ label, value, onChange, icon: Icon = Camer
               </>
             )}
           </div>
-          <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} disabled={loading} />
+          <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handleFileChange} disabled={loading} />
         </label>
       ) : (
         <div className="relative group overflow-hidden rounded-3xl h-32 w-full border border-stone-200">
